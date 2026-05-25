@@ -98,6 +98,28 @@ test("supports a local mock mode without forwarding screenshots", async () => {
   }
 });
 
+test("can return note-ready plain text for Shortcuts", async () => {
+  const relay = createRelayServer({
+    mockAnalysis: true,
+    allowInsecureLocal: true,
+  });
+  const relayUrl = await listen(relay);
+  try {
+    const response = await fetch(`${relayUrl}/capture.txt`, {
+      method: "POST",
+      headers: { "content-type": "image/jpeg" },
+      body: Buffer.from("jpg"),
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get("content-type"), /^text\/plain/);
+    const result = await response.text();
+    assert.match(result, /本地测试截图/);
+    assert.doesNotMatch(result, /^\{/);
+  } finally {
+    await close(relay);
+  }
+});
+
 test("rejects missing phone token before provider invocation", async () => {
   const relay = createRelayServer({
     captureToken: "phone-token",

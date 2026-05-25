@@ -57,6 +57,19 @@ Request Body: File = <converted screenshot>
 
 Do not put `PROVIDER_API_KEY` in the Shortcut.
 
+For the simplest Apple Notes workflow, use the plain-text endpoint instead:
+
+```text
+URL: https://your-relay.example.com/capture.txt
+Method: POST
+Header: Content-Type = image/jpeg
+Header: X-Capture-Token = <CAPTURE_TOKEN>
+Request Body: File = <converted screenshot>
+```
+
+`/capture.txt` returns only the note body, so Shortcuts can pass the URL
+contents directly to Apple Notes without extracting a JSON field.
+
 ## Endpoint
 
 `POST /capture` accepts a JPEG, PNG, or WEBP request body and returns:
@@ -72,6 +85,17 @@ Do not put `PROVIDER_API_KEY` in the Shortcut.
   "sensitive_reason": "",
   "note": "ready-to-save plain text"
 }
+```
+
+`POST /capture.txt` accepts the same image request and returns plain text:
+
+```text
+searchable title
+
+保存时间：...
+
+摘要
+...
 ```
 
 `GET /health` reports whether provider mode or mock mode is active.

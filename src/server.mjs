@@ -47,6 +47,14 @@ function json(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function text(response, status, body) {
+  response.writeHead(status, {
+    "content-type": "text/plain; charset=utf-8",
+    "cache-control": "no-store",
+  });
+  response.end(body);
+}
+
 function isLoopback(address = "") {
   return address === "::1" || address === "127.0.0.1" || address === "::ffff:127.0.0.1";
 }
@@ -212,39 +220,54 @@ function mockedAnalysis() {
   };
 }
 
-async function handleCapture(request, response, config) {
+async function analyzeCapture(request, response, config) {
   const permittedWithoutToken = config.allowInsecureLocal && isLoopback(request.socket.remoteAddress);
   if (!permittedWithoutToken) {
     if (!config.captureToken) {
-      return json(response, 500, { error: "CAPTURE_TOKEN is not configured" });
+      const error = new Error("CAPTURE_TOKEN is not configured");
+      error.status = 500;
+      throw error;
     }
     if (!secureEqual(request.headers["x-capture-token"], config.captureToken)) {
-      return json(response, 401, { error: "Invalid capture token" });
+      const error = new Error("Invalid capture token");
+      error.status = 401;
+      throw error;
     }
   }
 
   const mimeType = String(request.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
   if (!IMAGE_TYPES.has(mimeType)) {
-    return json(response, 415, { error: "Send a JPEG, PNG, or WEBP image file" });
+    const error = new Error("Send a JPEG, PNG, or WEBP image file");
+    error.status = 415;
+    throw error;
   }
 
   const image = await readBody(request, config.maxImageBytes);
   if (!image.length) {
-    return json(response, 400, { error: "Image body is empty" });
+    const error = new Error("Image body is empty");
+    error.status = 400;
+    throw error;
   }
 
   if (!config.mockAnalysis && (!config.providerApiKey || !config.providerModel)) {
-    return json(response, 500, {
-      error: "Set PROVIDER_API_KEY and PROVIDER_MODEL, or use MOCK_ANALYSIS=true",
-    });
+    const error = new Error("Set PROVIDER_API_KEY and PROVIDER_MODEL, or use MOCK_ANALYSIS=true");
+    error.status = 500;
+    throw error;
   }
 
   const analysis = config.mockAnalysis
     ? normalizedAnalysis(mockedAnalysis())
     : await requestProvider(image, mimeType, config);
-  return json(response, 200, {
+  return {
     ...analysis,
     note: formatNote(analysis),
+  };
+}
+
+async function handleCapture(request, response, config) {
+  const analysis = await analyzeCapture(request, response, config);
+  return json(response, 200, {
+    ...analysis,
   });
 }
 
@@ -262,6 +285,10 @@ export function createRelayServer(configOverrides = {}) {
       }
       if (request.method === "POST" && url.pathname === "/capture") {
         return await handleCapture(request, response, config);
+      }
+      if (request.method === "POST" && url.pathname === "/capture.txt") {
+        const analysis = await analyzeCapture(request, response, config);
+        return text(response, 200, analysis.note);
       }
       return json(response, 404, { error: "Not found" });
     } catch (error) {
